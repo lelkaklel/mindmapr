@@ -552,33 +552,54 @@ const MindMap: React.FC<MindMapProps> = ({ data, onNodeClick, onNodeUpdate, onNo
     setEditingInfo(null);
   };
 
+  // Основной useEffect для создания диаграммы
   useEffect(() => {
-    if (!svgRef.current || !data || dimensions.width === 0) return;
-
-    const width = dimensions.width;
-    const height = dimensions.height;
-    const margin = { top: 20, right: 90, bottom: 30, left: 90 };
-
-    // Очищаем предыдущий SVG
-    d3.select(svgRef.current).selectAll('*').remove();
-
+    if (!svgRef.current || !containerRef.current || !data) return;
+    
+    const { width, height } = dimensions;
+    
     const svg = d3.select(svgRef.current)
       .attr('width', width)
       .attr('height', height);
-
-    // Создаем группу для масштабирования и перемещения
+    
+    svg.selectAll('*').remove();
+    
+    // Создаем группу для содержимого диаграммы
     const g = svg.append('g');
-
-    // Добавляем зум поведение
+    
+    // Функция масштабирования (zoom)
     const zoom = d3.zoom()
       .scaleExtent([0.1, 3]) // Минимальный и максимальный масштаб
       .on('zoom', (event) => {
         g.attr('transform', event.transform);
+        // Обновляем текущий масштаб
         setScale(event.transform.k);
       });
-
+    
+    // Применяем масштабирование к SVG элементу
     svg.call(zoom as any);
-
+    
+    // Обработка сенсорного ввода для мобильных устройств
+    const handleTouchStart = (event: TouchEvent) => {
+      if (event.touches.length === 1) {
+        // Одно касание - перемещение
+        event.preventDefault(); // Предотвращаем стандартный скролл
+      }
+    };
+    
+    const isMobile = window.matchMedia('(max-width: 768px)').matches;
+    
+    if (isMobile) {
+      // Настройка для мобильных устройств
+      zoom.filter((event) => {
+        // Разрешаем все события мыши, колесика и сенсорного ввода
+        return !event.ctrlKey && event.type !== 'dblclick';
+      });
+      
+      // Добавляем специальные обработчики сенсорных событий
+      svgRef.current.addEventListener('touchstart', handleTouchStart, { passive: false });
+    }
+    
     // Добавляем кнопки управления масштабом
     const zoomControls = svg.append('g')
       .attr('class', 'zoom-controls')
@@ -667,11 +688,13 @@ const MindMap: React.FC<MindMapProps> = ({ data, onNodeClick, onNodeUpdate, onNo
       .attr('font-size', '18px')
       .style('pointer-events', 'none')
       .text('⛶');
-
-    // Создаем иерархию и назначаем координаты
+    
+    // Функция для создания иерархии данных
     const root = d3.hierarchy(data.root);
+    
+    // Создаем макет диаграммы
     createMindMapLayout(root, width, height);
-
+    
     // Слой для линий (добавляем его первым, чтобы он был под узлами)
     const linksLayer = g.append('g').attr('class', 'links-layer');
     
@@ -817,63 +840,6 @@ const MindMap: React.FC<MindMapProps> = ({ data, onNodeClick, onNodeUpdate, onNo
       setEditingInfo(null);
     });
 
-    // Добавляем кнопку добавления дочернего узла (символ "+")
-    node.append('g')
-      .attr('class', 'add-node-button')
-      .attr('transform', (d: any) => {
-        const isLeft = d.y < width / 2;
-        const nodeStyle = getNodeStyle(d.depth);
-        const textWidth = getTextWidth(d.data.text, nodeStyle.fontSize) + nodeStyle.padding * 2;
-        const offset = Math.max(textWidth / 2 + 20, nodeStyle.height + 5);
-        return `translate(${isLeft ? -offset : offset}, 0)`;
-      })
-      .style('cursor', 'pointer')
-      .on('click', (event, d: any) => {
-        event.stopPropagation();
-        const newNode: Node = {
-          id: Date.now().toString(),
-          text: 'Новый узел',
-          children: []
-        };
-        d.data.children.push(newNode);
-        if (onNodeUpdate) {
-          onNodeUpdate(d.data);
-        }
-      })
-      .append('text')
-      .attr('dy', '.35em')
-      .attr('text-anchor', 'middle')
-      .attr('font-size', '16px')
-      .attr('font-weight', 'bold')
-      .style('fill', '#4CAF50')
-      .text('+');
-
-    // Добавляем кнопку удаления узла (символ "×")
-    node.filter((d: any) => d.depth !== 0) // Не добавляем кнопку удаления для корневого узла
-      .append('g')
-      .attr('class', 'delete-node-button')
-      .attr('transform', (d: any) => {
-        const isLeft = d.y < width / 2;
-        const nodeStyle = getNodeStyle(d.depth);
-        const textWidth = getTextWidth(d.data.text, nodeStyle.fontSize) + nodeStyle.padding * 2;
-        const offset = Math.max(textWidth / 2 + 40, nodeStyle.height + 25);
-        return `translate(${isLeft ? -offset : offset}, 0)`;
-      })
-      .style('cursor', 'pointer')
-      .on('click', (event, d: any) => {
-        event.stopPropagation();
-        if (onNodeDelete && d.parent) {
-          onNodeDelete(d.data.id, d.parent.data.id);
-        }
-      })
-      .append('text')
-      .attr('dy', '.35em')
-      .attr('text-anchor', 'middle')
-      .attr('font-size', '16px')
-      .attr('font-weight', 'bold')
-      .style('fill', '#f44336')
-      .text('×');
-
     // Центрируем карту
     const gElement = g.node() as SVGGElement;
     if (gElement) {
@@ -903,6 +869,12 @@ const MindMap: React.FC<MindMapProps> = ({ data, onNodeClick, onNodeUpdate, onNo
       svg.call(zoom.transform as any, initialTransform);
     }
 
+    // Очистка при размонтировании
+    return () => {
+      if (isMobile && svgRef.current) {
+        svgRef.current.removeEventListener('touchstart', handleTouchStart);
+      }
+    };
   }, [data, onNodeClick, onNodeUpdate, onNodeDelete, dimensions]);
 
   // Стили для позиционирования панели редактирования

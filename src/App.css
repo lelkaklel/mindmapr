@@ -70,11 +70,13 @@
   position: relative;
   width: 100%;
   height: 100%;
+  touch-action: none;
 }
 
 .mind-map-wrapper svg {
   width: 100%;
   height: 100%;
+  touch-action: manipulation;
 }
 
 .edit-node-panel {
@@ -144,22 +146,6 @@
 
 .link {
   stroke-opacity: 0.6;
-}
-
-.add-node-button,
-.delete-node-button {
-  opacity: 0;
-  transition: opacity 0.3s;
-}
-
-.node:hover .add-node-button,
-.node:hover .delete-node-button {
-  opacity: 1;
-}
-
-.add-node-button:hover text,
-.delete-node-button:hover text {
-  font-size: 18px;
 }
 
 .zoom-controls {
@@ -251,6 +237,17 @@
   background-color: #e0e0e0;
 }
 
+/* Стили для адаптивного меню экспорта */
+@media (max-width: 768px) {
+  .export-menu {
+    width: 110px;
+  }
+  
+  .export-menu button {
+    padding: 12px 10px;
+  }
+}
+
 /* GitHub уголок */
 .github-corner {
   z-index: 999;
@@ -267,11 +264,113 @@
   40%, 80% { transform: rotate(10deg); }
 }
 
+/* Адаптивные настройки для GitHub уголка */
+@media (max-width: 768px) {
+  .github-corner svg {
+    width: 50px;
+    height: 50px;
+  }
+}
+
 @media (max-width: 500px) {
   .github-corner:hover .octo-arm {
     animation: none;
   }
   .github-corner .octo-arm {
     animation: octocat-wave 560ms ease-in-out;
+  }
+  
+  .github-corner svg {
+    width: 40px;
+    height: 40px;
+  }
+}
+
+/* Полностью скрываем GitHub-баннер на очень маленьких экранах */
+@media (max-width: 768px) {
+  .github-corner {
+    display: none;
+  }
+}
+
+/* Адаптивные стили для мобильных устройств */
+@media (max-width: 768px) {
+  .app-header {
+    flex-direction: column;
+    padding: 15px 10px;
+    gap: 15px;
+  }
+  
+  .app-header h1 {
+    font-size: 20px;
+  }
+  
+  .app-controls {
+    width: 100%;
+    justify-content: center;
+  }
+  
+  .app-controls button,
+  .import-button {
+    padding: 8px 12px;
+    font-size: 13px;
+  }
+  
+  .edit-node-panel {
+    padding: 12px;
+    min-width: 180px;
+    max-width: 80vw;
+  }
+  
+  .edit-node-panel input {
+    font-size: 13px;
+  }
+  
+  .edit-node-panel button {
+    padding: 7px 8px;
+    font-size: 12px;
+  }
+  
+  /* Увеличиваем размер контролов для сенсорного ввода */
+  .zoom-controls circle {
+    r: 15;
+  }
+  
+  .zoom-controls text {
+    font-size: 20px;
+  }
+}
+
+@media (max-width: 480px) {
+  .app-header h1 {
+    font-size: 18px;
+  }
+  
+  .app-controls {
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  
+  .app-controls button,
+  .import-button {
+    padding: 6px 10px;
+    font-size: 12px;
+    flex: 1 0 auto;
+  }
+  
+  .edit-node-panel {
+    padding: 10px;
+    min-width: 160px;
+    max-width: 90vw;
+  }
+  
+  .edit-node-panel .buttons-row {
+    flex-wrap: wrap;
+  }
+  
+  .edit-node-panel button {
+    padding: 8px 5px;
+    font-size: 11px;
+    margin-bottom: 5px;
   }
 } 
