@@ -554,52 +554,32 @@ const MindMap: React.FC<MindMapProps> = ({ data, onNodeClick, onNodeUpdate, onNo
 
   // Основной useEffect для создания диаграммы
   useEffect(() => {
-    if (!svgRef.current || !containerRef.current || !data) return;
-    
-    const { width, height } = dimensions;
-    
+    if (!svgRef.current || !containerRef.current || !data || dimensions.width === 0) return;
+
+    const width = dimensions.width;
+    const height = dimensions.height;
+    const margin = { top: 20, right: 90, bottom: 30, left: 90 };
+
+    // Очищаем предыдущий SVG
+    d3.select(svgRef.current).selectAll('*').remove();
+
     const svg = d3.select(svgRef.current)
       .attr('width', width)
       .attr('height', height);
-    
-    svg.selectAll('*').remove();
-    
-    // Создаем группу для содержимого диаграммы
+
+    // Создаем группу для масштабирования и перемещения
     const g = svg.append('g');
-    
-    // Функция масштабирования (zoom)
+
+    // Добавляем зум поведение
     const zoom = d3.zoom()
       .scaleExtent([0.1, 3]) // Минимальный и максимальный масштаб
       .on('zoom', (event) => {
         g.attr('transform', event.transform);
-        // Обновляем текущий масштаб
         setScale(event.transform.k);
       });
-    
-    // Применяем масштабирование к SVG элементу
+
     svg.call(zoom as any);
-    
-    // Обработка сенсорного ввода для мобильных устройств
-    const handleTouchStart = (event: TouchEvent) => {
-      if (event.touches.length === 1) {
-        // Одно касание - перемещение
-        event.preventDefault(); // Предотвращаем стандартный скролл
-      }
-    };
-    
-    const isMobile = window.matchMedia('(max-width: 768px)').matches;
-    
-    if (isMobile) {
-      // Настройка для мобильных устройств
-      zoom.filter((event) => {
-        // Разрешаем все события мыши, колесика и сенсорного ввода
-        return !event.ctrlKey && event.type !== 'dblclick';
-      });
-      
-      // Добавляем специальные обработчики сенсорных событий
-      svgRef.current.addEventListener('touchstart', handleTouchStart, { passive: false });
-    }
-    
+
     // Добавляем кнопки управления масштабом
     const zoomControls = svg.append('g')
       .attr('class', 'zoom-controls')
@@ -688,13 +668,11 @@ const MindMap: React.FC<MindMapProps> = ({ data, onNodeClick, onNodeUpdate, onNo
       .attr('font-size', '18px')
       .style('pointer-events', 'none')
       .text('⛶');
-    
-    // Функция для создания иерархии данных
+
+    // Создаем иерархию и назначаем координаты
     const root = d3.hierarchy(data.root);
-    
-    // Создаем макет диаграммы
     createMindMapLayout(root, width, height);
-    
+
     // Слой для линий (добавляем его первым, чтобы он был под узлами)
     const linksLayer = g.append('g').attr('class', 'links-layer');
     
@@ -749,7 +727,7 @@ const MindMap: React.FC<MindMapProps> = ({ data, onNodeClick, onNodeUpdate, onNo
       .enter()
       .append('path')
       .attr('class', 'link')
-      .attr('d', generateCustomLink)
+      .attr('d', d => generateCustomLink(d))
       .style('fill', 'none')
       .style('stroke', (d: any) => {
         // Более тонкие линии для удаленных узлов
@@ -839,7 +817,7 @@ const MindMap: React.FC<MindMapProps> = ({ data, onNodeClick, onNodeUpdate, onNo
     svg.on('click', () => {
       setEditingInfo(null);
     });
-
+    
     // Центрируем карту
     const gElement = g.node() as SVGGElement;
     if (gElement) {
@@ -869,15 +847,9 @@ const MindMap: React.FC<MindMapProps> = ({ data, onNodeClick, onNodeUpdate, onNo
       svg.call(zoom.transform as any, initialTransform);
     }
 
-    // Очистка при размонтировании
-    return () => {
-      if (isMobile && svgRef.current) {
-        svgRef.current.removeEventListener('touchstart', handleTouchStart);
-      }
-    };
   }, [data, onNodeClick, onNodeUpdate, onNodeDelete, dimensions]);
 
-  // Стили для позиционирования панели редактирования
+  // Функция для расчета стилей панели редактирования
   const getEditPanelStyle = () => {
     if (!editingInfo || !containerRef.current) return {};
     

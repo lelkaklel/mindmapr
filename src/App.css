@@ -188,6 +188,58 @@
   pointer-events: none;
 }
 
+/* Стили для фиксированных кнопок масштабирования */
+.fixed-zoom-controls {
+  position: absolute;
+  right: 15px;
+  top: 15px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  z-index: 1000;
+}
+
+.zoom-button {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background-color: white;
+  border: 1px solid #ccc;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  cursor: pointer;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+  transition: background-color 0.3s;
+}
+
+.zoom-button:hover {
+  background-color: #f5f5f5;
+}
+
+.zoom-button:active {
+  background-color: #e8e8e8;
+}
+
+.zoom-reset {
+  font-size: 18px;
+}
+
+/* Адаптивные стили для кнопок масштабирования на мобильных устройствах */
+@media (max-width: 768px) {
+  .fixed-zoom-controls {
+    right: 10px;
+    top: 10px;
+  }
+  
+  .zoom-button {
+    width: 40px;
+    height: 40px;
+    font-size: 22px;
+  }
+}
+
 /* Контейнер для меню экспорта */
 .export-menu-container {
   position: relative;

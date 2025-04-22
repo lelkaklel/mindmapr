@@ -185,7 +185,7 @@ const App: React.FC = () => {
       </a>
       
       <header className="app-header">
-        <h1>MindMapr <span>- Редактор диаграмм связей</span></h1>
+        <h1><span>MindMapr - Редактор диаграмм связей</span></h1>
         <div className="app-controls">
           <div className="export-menu-container">
             <button 
