@@ -548,36 +548,66 @@ const MindMap: React.FC<MindMapProps> = ({ data, onNodeClick, onNodeUpdate, onNo
     if (!editingInfo || !onNodeUpdate) return;
     
     const updatedNode = { ...editingInfo.node, text: editingInfo.text };
+    
+    // Находим и обновляем текст узла напрямую в DOM без перерисовки всей диаграммы
+    if (svgRef.current) {
+      const nodeElement = d3.select(svgRef.current)
+        .select(`g.node[data-id="${updatedNode.id}"]`);
+      
+      if (!nodeElement.empty()) {
+        // Обновляем текст
+        nodeElement.select('text').text(updatedNode.text);
+        
+        // Обновляем прямоугольник, чтобы он соответствовал новому размеру текста
+        const nodeStyle = getNodeStyle(editingInfo.depth);
+        const textWidth = getTextWidth(updatedNode.text, nodeStyle.fontSize) + nodeStyle.padding * 2;
+        
+        nodeElement.select('rect')
+          .attr('x', -textWidth / 2)
+          .attr('width', textWidth);
+      }
+    }
+    
+    // Вызываем обработчик для обновления данных
     onNodeUpdate(updatedNode);
     setEditingInfo(null);
   };
 
   // Основной useEffect для создания диаграммы
   useEffect(() => {
-    if (!svgRef.current || !containerRef.current || !data || dimensions.width === 0) return;
-
-    const width = dimensions.width;
-    const height = dimensions.height;
-    const margin = { top: 20, right: 90, bottom: 30, left: 90 };
-
-    // Очищаем предыдущий SVG
-    d3.select(svgRef.current).selectAll('*').remove();
-
+    if (!svgRef.current || !containerRef.current || !data) return;
+    
+    const { width, height } = dimensions;
+    
+    // Сохраняем текущую трансформацию перед очисткой SVG
+    let savedTransform: d3.ZoomTransform | null = null;
+    if (svgRef.current) {
+      try {
+        savedTransform = d3.zoomTransform(svgRef.current);
+      } catch (e) {
+        console.log('Ошибка при получении трансформации:', e);
+      }
+    }
+    
     const svg = d3.select(svgRef.current)
       .attr('width', width)
       .attr('height', height);
-
-    // Создаем группу для масштабирования и перемещения
+    
+    svg.selectAll('*').remove();
+    
+    // Создаем группу для содержимого диаграммы
     const g = svg.append('g');
-
-    // Добавляем зум поведение
+    
+    // Функция масштабирования (zoom)
     const zoom = d3.zoom()
       .scaleExtent([0.1, 3]) // Минимальный и максимальный масштаб
       .on('zoom', (event) => {
         g.attr('transform', event.transform);
+        // Обновляем текущий масштаб
         setScale(event.transform.k);
       });
-
+    
+    // Применяем масштабирование к SVG элементу
     svg.call(zoom as any);
 
     // Добавляем кнопки управления масштабом
@@ -653,10 +683,8 @@ const MindMap: React.FC<MindMapProps> = ({ data, onNodeClick, onNodeUpdate, onNo
             .scale(scale)
             .translate(-boundingBox.x - boundingBox.width/2, -boundingBox.y - boundingBox.height/2);
           
-          // Применяем трансформацию с анимацией
-          svg.transition()
-            .duration(500)
-            .call(zoom.transform as any, initialTransform);
+          // Применяем трансформацию
+          svg.call(zoom.transform as any, initialTransform);
         }
       });
 
@@ -818,33 +846,41 @@ const MindMap: React.FC<MindMapProps> = ({ data, onNodeClick, onNodeUpdate, onNo
       setEditingInfo(null);
     });
     
-    // Центрируем карту
-    const gElement = g.node() as SVGGElement;
-    if (gElement) {
-      const boundingBox = gElement.getBBox();
-      
-      // Вычисляем масштаб для подгонки всей диаграммы на страницу с отступами
-      const padding = 40; // отступ от краев
-      const scaleX = (width - padding * 2) / boundingBox.width;
-      const scaleY = (height - padding * 2) / boundingBox.height;
-      const scale = Math.min(scaleX, scaleY, 0.8); // Ограничиваем масштаб для удобства просмотра
-      
-      // Центрируем диаграмму
-      const centerX = width / 2;
-      const centerY = height / 2;
-      
-      // Создаем начальную трансформацию
-      const initialTransform = d3.zoomIdentity
-        .translate(centerX, centerY)
-        .scale(scale)
-        .translate(-boundingBox.x - boundingBox.width/2, -boundingBox.y - boundingBox.height/2);
-      
-      // Применяем трансформацию
-      svg.call(zoom.transform as any, initialTransform);
+    // Добавляем data-id атрибут для узлов, чтобы их можно было легко найти
+    node.attr('data-id', (d: any) => d.data.id);
+    
+    // Восстанавливаем предыдущую трансформацию, если она была сохранена
+    if (savedTransform) {
+      svg.call(zoom.transform as any, savedTransform);
     } else {
-      // Запасной вариант, если не удалось получить границы
-      const initialTransform = d3.zoomIdentity.translate(width/2, height/2).scale(0.8);
-      svg.call(zoom.transform as any, initialTransform);
+      // Или применяем начальную трансформацию для первого рендера
+      const gElement = g.node() as SVGGElement;
+      if (gElement) {
+        const boundingBox = gElement.getBBox();
+        
+        // Вычисляем масштаб для подгонки всей диаграммы на страницу с отступами
+        const padding = 40; // отступ от краев
+        const scaleX = (width - padding * 2) / boundingBox.width;
+        const scaleY = (height - padding * 2) / boundingBox.height;
+        const scale = Math.min(scaleX, scaleY, 0.8); // Ограничиваем масштаб для удобства просмотра
+        
+        // Центрируем диаграмму
+        const centerX = width / 2;
+        const centerY = height / 2;
+        
+        // Создаем начальную трансформацию
+        const initialTransform = d3.zoomIdentity
+          .translate(centerX, centerY)
+          .scale(scale)
+          .translate(-boundingBox.x - boundingBox.width/2, -boundingBox.y - boundingBox.height/2);
+        
+        // Применяем трансформацию
+        svg.call(zoom.transform as any, initialTransform);
+      } else {
+        // Запасной вариант, если не удалось получить границы
+        const initialTransform = d3.zoomIdentity.translate(width/2, height/2).scale(0.8);
+        svg.call(zoom.transform as any, initialTransform);
+      }
     }
 
   }, [data, onNodeClick, onNodeUpdate, onNodeDelete, dimensions]);
