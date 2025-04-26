@@ -91,6 +91,31 @@ const MindMap: React.FC<MindMapProps> = ({ data, onNodeClick, onNodeUpdate, onNo
   const [editingInfo, setEditingInfo] = useState<EditingNodeInfo | null>(null);
   const [scale, setScale] = useState(1);
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
+  const transformRef = useRef<d3.ZoomTransform | null>(null);
+
+  // Функция для сохранения текущей трансформации в localStorage
+  const saveTransformation = (transform: d3.ZoomTransform) => {
+    transformRef.current = transform;
+    localStorage.setItem('mindmap-transform', JSON.stringify({
+      x: transform.x,
+      y: transform.y,
+      k: transform.k
+    }));
+  };
+
+  // Функция для загрузки трансформации из localStorage
+  const loadSavedTransformation = (): d3.ZoomTransform | null => {
+    try {
+      const savedTransform = localStorage.getItem('mindmap-transform');
+      if (savedTransform) {
+        const { x, y, k } = JSON.parse(savedTransform);
+        return d3.zoomIdentity.translate(x, y).scale(k);
+      }
+    } catch (error) {
+      console.error('Ошибка при загрузке трансформации:', error);
+    }
+    return null;
+  };
 
   // Функция для обновления размеров
   const updateDimensions = () => {
@@ -123,6 +148,9 @@ const MindMap: React.FC<MindMapProps> = ({ data, onNodeClick, onNodeUpdate, onNo
       const originalWidth = containerRect.width;
       const originalHeight = containerRect.height;
       
+      // Определяем, используется ли темная тема
+      const isDarkTheme = document.body.classList.contains('dark-theme');
+      
       // Создаем временный div для создания canvas
       const tempDiv = document.createElement('div');
       document.body.appendChild(tempDiv);
@@ -130,12 +158,16 @@ const MindMap: React.FC<MindMapProps> = ({ data, onNodeClick, onNodeUpdate, onNo
       tempDiv.style.left = '-9999px';
       tempDiv.style.width = '1200px';
       tempDiv.style.height = '842px';
+      tempDiv.style.backgroundColor = isDarkTheme ? '#333' : '#ffffff';
       
       // Создаем новый SVG для экспорта
       const exportSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
       exportSvg.setAttribute('width', '1200');
       exportSvg.setAttribute('height', '842');
       exportSvg.setAttribute('viewBox', '0 0 1200 842');
+      if (isDarkTheme) {
+        exportSvg.style.backgroundColor = '#333';
+      }
       
       // Копируем содержимое исходного SVG
       const exportG = document.createElementNS('http://www.w3.org/2000/svg', 'g');
@@ -168,7 +200,7 @@ const MindMap: React.FC<MindMapProps> = ({ data, onNodeClick, onNodeUpdate, onNo
       // Конвертируем SVG в Canvas с помощью html2canvas
       const canvas = await html2canvas(tempDiv, {
         scale: 2, // Увеличиваем масштаб для лучшего качества
-        backgroundColor: '#ffffff',
+        backgroundColor: isDarkTheme ? '#333' : '#ffffff',
         logging: false
       });
       
@@ -201,76 +233,63 @@ const MindMap: React.FC<MindMapProps> = ({ data, onNodeClick, onNodeUpdate, onNo
     // Закрываем форму редактирования, если она открыта
     setEditingInfo(null);
     
+    // Определяем, используется ли темная тема
+    const isDarkTheme = document.body.classList.contains('dark-theme');
+    
     // Задержка для обеспечения закрытия формы перед экспортом
     await new Promise(resolve => setTimeout(resolve, 100));
     
     try {
-      // Получаем текущую трансформацию
-      const svg = d3.select(svgRef.current);
-      const g = svg.select('g');
-      const currentTransform = d3.zoomTransform(svg.node() as any);
+      const svgNode = svgRef.current;
+      const svgRect = svgNode.getBoundingClientRect();
       
-      // Получаем размеры контейнера
-      const containerRect = containerRef.current.getBoundingClientRect();
+      // Получаем ширину и высоту SVG
+      const { width, height } = svgRect;
       
-      // Создаем временный div для создания canvas
+      // Получаем данные для экспорта с учетом масштаба
+      const serializer = new XMLSerializer();
+      const svgString = serializer.serializeToString(svgNode);
+      
+      // Создаем новый SVG с правильными размерами
+      const svgData = svgString
+        .replace(/width=".*?"/, `width="${width}"`)
+        .replace(/height=".*?"/, `height="${height}"`)
+        .replace('<svg', `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"`);
+      
+      // Создаем временный div для экспорта
       const tempDiv = document.createElement('div');
-      document.body.appendChild(tempDiv);
+      tempDiv.innerHTML = svgData;
       tempDiv.style.position = 'absolute';
       tempDiv.style.left = '-9999px';
-      tempDiv.style.width = '1500px';
-      tempDiv.style.height = '1000px';
+      document.body.appendChild(tempDiv);
+      const svgElement = tempDiv.querySelector('svg');
       
-      // Создаем новый SVG для экспорта
-      const exportSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-      exportSvg.setAttribute('width', '1500');
-      exportSvg.setAttribute('height', '1000');
-      exportSvg.setAttribute('viewBox', '0 0 1500 1000');
-      
-      // Копируем содержимое исходного SVG
-      const exportG = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-      const originalG = g.node() as SVGGElement;
-      
-      if (originalG) {
-        // Копируем все дочерние элементы
-        Array.from(originalG.childNodes).forEach((childNode: ChildNode) => {
-          exportG.appendChild(childNode.cloneNode(true));
+      if (svgElement) {
+        // Устанавливаем фон согласно теме
+        svgElement.style.backgroundColor = isDarkTheme ? '#333' : '#ffffff';
+        
+        // Устанавливаем корректные размеры
+        svgElement.setAttribute('width', `${width}px`);
+        svgElement.setAttribute('height', `${height}px`);
+        
+        // Конвертируем SVG в canvas
+        const canvas = await html2canvas(svgElement as unknown as HTMLElement, {
+          backgroundColor: isDarkTheme ? '#333' : '#ffffff',
+          scale: 2,
+          logging: false
         });
         
-        // Вычисляем масштаб для подгонки всей диаграммы на страницу с отступами
-        const padding = 50; // отступ от краев
-        const boundingBox = originalG.getBBox();
-        
-        const scaleX = (1500 - padding * 2) / boundingBox.width;
-        const scaleY = (1000 - padding * 2) / boundingBox.height;
-        const scale = Math.min(scaleX, scaleY, 2); // Ограничиваем максимальный масштаб для качества
-        
-        // Центрируем диаграмму с использованием вычисленного масштаба
-        const centerX = 1500 / 2;
-        const centerY = 1000 / 2;
-        const transformValue = `translate(${centerX}, ${centerY}) scale(${scale}) translate(${-boundingBox.x - boundingBox.width/2}, ${-boundingBox.y - boundingBox.height/2})`;
-        
-        exportG.setAttribute('transform', transformValue);
-        exportSvg.appendChild(exportG);
-        tempDiv.appendChild(exportSvg);
+        // Конвертируем canvas в PNG
+        canvas.toBlob(function(blob) {
+          if (blob) {
+            saveAs(blob, 'mind_map.png');
+          }
+        }, 'image/png');
       }
-      
-      // Конвертируем SVG в Canvas с помощью html2canvas
-      const canvas = await html2canvas(tempDiv, {
-        scale: 2, // Увеличиваем масштаб для лучшего качества
-        backgroundColor: '#ffffff',
-        logging: false
-      });
       
       // Удаляем временный div
       document.body.removeChild(tempDiv);
       
-      // Конвертируем Canvas в PNG и сохраняем
-      canvas.toBlob((blob) => {
-        if (blob) {
-          saveAs(blob, 'mind_map.png');
-        }
-      }, 'image/png');
     } catch (error) {
       console.error('Ошибка при экспорте в PNG:', error);
     }
@@ -283,82 +302,69 @@ const MindMap: React.FC<MindMapProps> = ({ data, onNodeClick, onNodeUpdate, onNo
     // Закрываем форму редактирования, если она открыта
     setEditingInfo(null);
     
+    // Определяем, используется ли темная тема
+    const isDarkTheme = document.body.classList.contains('dark-theme');
+    
     // Задержка для обеспечения закрытия формы перед экспортом
     await new Promise(resolve => setTimeout(resolve, 100));
     
     try {
-      // Получаем текущую трансформацию
-      const svg = d3.select(svgRef.current);
-      const g = svg.select('g');
-      const currentTransform = d3.zoomTransform(svg.node() as any);
+      const svgNode = svgRef.current;
+      const svgRect = svgNode.getBoundingClientRect();
       
-      // Получаем размеры контейнера
-      const containerRect = containerRef.current.getBoundingClientRect();
+      // Получаем ширину и высоту SVG
+      const { width, height } = svgRect;
       
-      // Создаем временный div для создания canvas
+      // Получаем данные для экспорта с учетом масштаба
+      const serializer = new XMLSerializer();
+      const svgString = serializer.serializeToString(svgNode);
+      
+      // Создаем новый SVG с правильными размерами
+      const svgData = svgString
+        .replace(/width=".*?"/, `width="${width}"`)
+        .replace(/height=".*?"/, `height="${height}"`)
+        .replace('<svg', `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"`);
+      
+      // Создаем временный div для экспорта
       const tempDiv = document.createElement('div');
-      document.body.appendChild(tempDiv);
+      tempDiv.innerHTML = svgData;
       tempDiv.style.position = 'absolute';
       tempDiv.style.left = '-9999px';
-      tempDiv.style.width = '1500px';
-      tempDiv.style.height = '1000px';
+      document.body.appendChild(tempDiv);
+      const svgElement = tempDiv.querySelector('svg');
       
-      // Создаем новый SVG для экспорта
-      const exportSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-      exportSvg.setAttribute('width', '1500');
-      exportSvg.setAttribute('height', '1000');
-      exportSvg.setAttribute('viewBox', '0 0 1500 1000');
-      
-      // Копируем содержимое исходного SVG
-      const exportG = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-      const originalG = g.node() as SVGGElement;
-      
-      if (originalG) {
-        // Копируем все дочерние элементы
-        Array.from(originalG.childNodes).forEach((childNode: ChildNode) => {
-          exportG.appendChild(childNode.cloneNode(true));
+      if (svgElement) {
+        // Устанавливаем фон согласно теме
+        svgElement.style.backgroundColor = isDarkTheme ? '#333' : '#ffffff';
+        
+        // Устанавливаем корректные размеры
+        svgElement.setAttribute('width', `${width}px`);
+        svgElement.setAttribute('height', `${height}px`);
+        
+        // Конвертируем SVG в canvas
+        const canvas = await html2canvas(svgElement as unknown as HTMLElement, {
+          backgroundColor: isDarkTheme ? '#333' : '#ffffff',
+          scale: 2,
+          logging: false
         });
         
-        // Вычисляем масштаб для подгонки всей диаграммы на страницу с отступами
-        const padding = 50; // отступ от краев
-        const boundingBox = originalG.getBBox();
-        
-        const scaleX = (1500 - padding * 2) / boundingBox.width;
-        const scaleY = (1000 - padding * 2) / boundingBox.height;
-        const scale = Math.min(scaleX, scaleY, 2); // Ограничиваем максимальный масштаб для качества
-        
-        // Центрируем диаграмму с использованием вычисленного масштаба
-        const centerX = 1500 / 2;
-        const centerY = 1000 / 2;
-        const transformValue = `translate(${centerX}, ${centerY}) scale(${scale}) translate(${-boundingBox.x - boundingBox.width/2}, ${-boundingBox.y - boundingBox.height/2})`;
-        
-        exportG.setAttribute('transform', transformValue);
-        exportSvg.appendChild(exportG);
-        tempDiv.appendChild(exportSvg);
+        // Конвертируем canvas в JPEG
+        canvas.toBlob(function(blob) {
+          if (blob) {
+            saveAs(blob, 'mind_map.jpeg');
+          }
+        }, 'image/jpeg', 0.95);
       }
-      
-      // Конвертируем SVG в Canvas с помощью html2canvas
-      const canvas = await html2canvas(tempDiv, {
-        scale: 2, // Увеличиваем масштаб для лучшего качества
-        backgroundColor: '#ffffff',
-        logging: false
-      });
       
       // Удаляем временный div
       document.body.removeChild(tempDiv);
       
-      // Конвертируем Canvas в JPEG и сохраняем
-      canvas.toBlob((blob) => {
-        if (blob) {
-          saveAs(blob, 'mind_map.jpg');
-        }
-      }, 'image/jpeg', 0.9); // Качество 0.9
     } catch (error) {
       console.error('Ошибка при экспорте в JPEG:', error);
     }
   };
 
-  // Предоставляем функции экспорта через ref
+  // Регистрируем функции экспорта для внешнего доступа
   useEffect(() => {
     if (exportRef) {
       exportRef.current = {
@@ -367,13 +373,31 @@ const MindMap: React.FC<MindMapProps> = ({ data, onNodeClick, onNodeUpdate, onNo
         exportAsJPEG
       };
     }
-  }, [exportRef]);
+    
+    return () => {
+      if (exportRef) {
+        exportRef.current = null;
+      }
+    };
+  }, [exportRef, exportAsPDF, exportAsPNG, exportAsJPEG]);
 
   // Обработчик изменения размера окна
   useEffect(() => {
     updateDimensions();
-    window.addEventListener('resize', updateDimensions);
-    return () => window.removeEventListener('resize', updateDimensions);
+
+    const handleResize = () => {
+      updateDimensions();
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => {
+      window.removeEventListener('resize', handleResize);
+    };
+  }, []);
+
+  // Инициализируем размеры при монтировании компонента
+  useEffect(() => {
+    updateDimensions();
   }, []);
 
   // Функция для создания радиального макета mind map с предотвращением наложений
@@ -584,6 +608,9 @@ const MindMap: React.FC<MindMapProps> = ({ data, onNodeClick, onNodeUpdate, onNo
     if (svgRef.current) {
       try {
         savedTransform = d3.zoomTransform(svgRef.current);
+        if (savedTransform) {
+          transformRef.current = savedTransform;
+        }
       } catch (e) {
         console.log('Ошибка при получении трансформации:', e);
       }
@@ -605,6 +632,8 @@ const MindMap: React.FC<MindMapProps> = ({ data, onNodeClick, onNodeUpdate, onNo
         g.attr('transform', event.transform);
         // Обновляем текущий масштаб
         setScale(event.transform.k);
+        // Сохраняем трансформацию
+        saveTransformation(event.transform);
       });
     
     // Применяем масштабирование к SVG элементу
@@ -613,7 +642,7 @@ const MindMap: React.FC<MindMapProps> = ({ data, onNodeClick, onNodeUpdate, onNo
     // Добавляем кнопки управления масштабом
     const zoomControls = svg.append('g')
       .attr('class', 'zoom-controls')
-      .attr('transform', `translate(${width - 35}, 20)`);
+      .attr('transform', `translate(${width - 35}, 30)`);
 
     zoomControls.append('circle')
       .attr('r', 15)
@@ -849,11 +878,15 @@ const MindMap: React.FC<MindMapProps> = ({ data, onNodeClick, onNodeUpdate, onNo
     // Добавляем data-id атрибут для узлов, чтобы их можно было легко найти
     node.attr('data-id', (d: any) => d.data.id);
     
-    // Восстанавливаем предыдущую трансформацию, если она была сохранена
-    if (savedTransform) {
-      svg.call(zoom.transform as any, savedTransform);
+    // После добавления всех элементов, пытаемся восстановить трансформацию
+    const transformToApply = savedTransform || transformRef.current || loadSavedTransformation();
+    
+    if (transformToApply) {
+      // Применяем сохраненную трансформацию
+      svg.call(zoom.transform as any, transformToApply);
     } else {
-      // Или применяем начальную трансформацию для первого рендера
+      // Используем начальную трансформацию для центрирования диаграммы
+      // Получаем размеры и расположение диаграммы
       const gElement = g.node() as SVGGElement;
       if (gElement) {
         const boundingBox = gElement.getBBox();
@@ -874,12 +907,9 @@ const MindMap: React.FC<MindMapProps> = ({ data, onNodeClick, onNodeUpdate, onNo
           .scale(scale)
           .translate(-boundingBox.x - boundingBox.width/2, -boundingBox.y - boundingBox.height/2);
         
-        // Применяем трансформацию
+        // Применяем и сохраняем трансформацию
         svg.call(zoom.transform as any, initialTransform);
-      } else {
-        // Запасной вариант, если не удалось получить границы
-        const initialTransform = d3.zoomIdentity.translate(width/2, height/2).scale(0.8);
-        svg.call(zoom.transform as any, initialTransform);
+        saveTransformation(initialTransform);
       }
     }
 

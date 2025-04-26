@@ -1,6 +1,6 @@
 {
   "name": "mindmapr",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "SPA приложение на NodeJS для интерактивного создания Mind Map диаграмм. Приложение имеет интерфейс на русском языке.",
   "type": "module",
   "scripts": {
@@ -16,8 +16,8 @@
     "react",
     "typescript"
   ],
-  "author": "",
-  "license": "ISC",
+  "author": "lelkaklel@gmail.com",
+  "license": "MIT",
   "homepage": "https://lelkaklel.github.io/mindmapr",
   "repository": {
     "type": "git",
